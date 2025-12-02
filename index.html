@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drivers Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>Database Drivers Dashboard</h1>
+        <p>Scylla vs Cassandra Driver Release Comparison</p>
+    </header>
+
+    <main>
+        <div class="controls">
+            <button id="refresh-btn">Refresh Data</button>
+            <button id="clear-cache-btn">Clear Cache</button>
+            <span id="last-updated">Last updated: Never</span>
+            <span id="cache-status"></span>
+        </div>
+
+        <div class="table-container">
+            <table id="data-table">
+                <thead>
+                    <tr>
+                        <th>Driver Name</th>
+                        <th>Latest Scylla Release</th>
+                        <th>Equivalent Cassandra Release</th>
+                        <th>State vs Upstream</th>
+                        <th>Release Quarter</th>
+                        <th><a href="https://docs.scylladb.com/stable/versioning/driver-support.html" target="_blank" style="color: #667eea; text-decoration: none;">ScyllaDB Support</a></th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <!-- Driver rows will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- Load configuration first (contains GitHub token) -->
+    <script src="config.js"></script>
+    <!-- Main dashboard script -->
+    <script src="script.js"></script>
+</body>
+</html>

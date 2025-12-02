@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  drivers-dashboard:
+    build: .
+    ports:
+      - "8080:80"
+    environment:
+      - NGINX_PORT=80
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.drivers-dashboard.rule=Host(`drivers.yourdomain.com`)"
+      - "traefik.http.services.drivers-dashboard.loadbalancer.server.port=80"
+    networks:
+      - web
+
+networks:
+  web:
+    external: true
+    name: web
