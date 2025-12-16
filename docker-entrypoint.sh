@@ -30,3 +30,5 @@ fi
 echo "🌐 Starting nginx..."
 # Execute the original nginx command
 exec nginx -g 'daemon off;'
+
+

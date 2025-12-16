@@ -66,7 +66,8 @@ const drivers = [
         name: 'nodejs-rs-driver',
         scyllaRepo: 'scylladb/nodejs-rs-driver',
         cassandraRepo: null, // Scylla-specific driver
-        description: 'Node.js Rust-style driver'
+        description: 'Node.js Rust-style driver',
+        includePrereleases: true // Project currently ships prerelease builds
     }
 ];
 
@@ -267,15 +268,23 @@ function generateSupportMatrix(scyllaVersion, cassandraVersion, driverName) {
 // GitHub API Configuration
 // GitHub API Token - loaded from config.js (not committed to git)
 // If config.js doesn't exist or token is not set, falls back to unauthenticated requests
-let GITHUB_TOKEN = null;
-
-// Try to load token from config.js
-if (typeof window !== 'undefined' && window.GITHUB_CONFIG) {
-    GITHUB_TOKEN = window.GITHUB_CONFIG.GITHUB_TOKEN;
+// Note: GITHUB_TOKEN may already be declared in config.js, so we use a function to get it
+function getGitHubToken() {
+    // First check if config.js set it via window.GITHUB_CONFIG
+    if (typeof window !== 'undefined' && window.GITHUB_CONFIG && window.GITHUB_CONFIG.GITHUB_TOKEN) {
+        return window.GITHUB_CONFIG.GITHUB_TOKEN;
+    }
+    // Fallback: check if GITHUB_TOKEN was declared globally by config.js
+    if (typeof GITHUB_TOKEN !== 'undefined' && GITHUB_TOKEN) {
+        return GITHUB_TOKEN;
+    }
+    return null;
 }
 
+const githubToken = getGitHubToken();
+
 // Fallback message for debugging
-if (!GITHUB_TOKEN) {
+if (!githubToken) {
     console.log('🔓 No GitHub token found - using unauthenticated requests (60/hour limit)');
 } else {
     console.log('🔑 GitHub token loaded - authenticated requests enabled (5,000/hour limit)');
@@ -287,22 +296,22 @@ function getGitHubHeaders() {
         'User-Agent': 'Drivers-Dashboard/1.0'
     };
 
-    if (GITHUB_TOKEN) {
+    if (githubToken) {
         // Use Bearer format for fine-grained tokens (github_pat_), token format for classic tokens (ghp_)
-        const authFormat = GITHUB_TOKEN.startsWith('github_pat_') ? 'Bearer' : 'token';
-        headers['Authorization'] = `${authFormat} ${GITHUB_TOKEN}`;
+        const authFormat = githubToken.startsWith('github_pat_') ? 'Bearer' : 'token';
+        headers['Authorization'] = `${authFormat} ${githubToken}`;
     }
 
     return headers;
 }
 
-async function fetchGitHubReleases(owner, repo, versionPrefix = null) {
+async function fetchGitHubReleases(owner, repo, versionPrefix = null, includePrereleases = false) {
     // Special handling for drivers that use tags instead of releases
     const isCassandraPython = owner === 'apache' && repo === 'cassandra-python-driver';
     const isTags = isCassandraPython; // Only Python driver uses tags
     const endpoint = isTags ? 'tags' : 'releases';
 
-    console.log(`📦 Fetching ${endpoint} for: ${owner}/${repo}`);
+    console.log(`📦 Fetching ${endpoint} for: ${owner}/${repo}, includePrereleases=${includePrereleases}`);
 
     try {
         const url = `https://api.github.com/repos/${owner}/${repo}/${endpoint}`;
@@ -346,7 +355,7 @@ async function fetchGitHubReleases(owner, repo, versionPrefix = null) {
         const data = await response.json();
         console.log(`📦 Found ${data.length} ${endpoint} for ${owner}/${repo}`);
 
-        return await processReleases(data, isCassandraPython, versionPrefix, owner, repo);
+        return await processReleases(data, isCassandraPython, versionPrefix, owner, repo, includePrereleases);
     } catch (error) {
         console.error(`💥 Network error for ${owner}/${repo}:`, error);
         return {
@@ -357,8 +366,8 @@ async function fetchGitHubReleases(owner, repo, versionPrefix = null) {
     }
 }
 
-async function processReleases(data, isTags = false, versionPrefix = null, owner = null, repo = null) {
-    console.log(`🔍 Processing ${isTags ? 'tags' : 'releases'} data${versionPrefix ? ` with version filter: ${versionPrefix}` : ''}`);
+async function processReleases(data, isTags = false, versionPrefix = null, owner = null, repo = null, includePrereleases = false) {
+    console.log(`🔍 Processing ${isTags ? 'tags' : 'releases'} data${versionPrefix ? ` with version filter: ${versionPrefix}` : ''}, includePrereleases=${includePrereleases}`);
 
     if (isTags) {
         // Handle tags data structure
@@ -452,13 +461,18 @@ async function processReleases(data, isTags = false, versionPrefix = null, owner
         };
     } else {
         // Handle releases data structure (existing logic)
-        console.log('📦 Processing releases data');
-        let stableReleases = data.filter(release => !release.prerelease && !release.draft);
+        console.log(`📦 Processing releases data, total: ${data.length}, includePrereleases: ${includePrereleases}`);
+        let stableReleases = data.filter(release => {
+            const include = (includePrereleases || !release.prerelease) && !release.draft;
+            console.log(`  📋 ${release.tag_name}: prerelease=${release.prerelease}, draft=${release.draft}, include=${include}`);
+            return include;
+        });
 
         // Filter releases by version prefix if specified
         if (versionPrefix) {
             stableReleases = stableReleases.filter(release => release.tag_name.startsWith(versionPrefix));
-            console.log(`📦 Filtered releases for ${versionPrefix}: ${stableReleases.length} of ${data.filter(release => !release.prerelease && !release.draft).length}`);
+            const eligibleCount = data.filter(release => (includePrereleases || !release.prerelease) && !release.draft).length;
+            console.log(`📦 Filtered releases for ${versionPrefix}: ${stableReleases.length} of ${eligibleCount}`);
         }
 
         if (stableReleases.length === 0) {
@@ -476,7 +490,7 @@ async function processReleases(data, isTags = false, versionPrefix = null, owner
 }
 
 async function fetchDriverData(driver) {
-    console.log(`🚗 Fetching data for driver: ${driver.name}${driver.versionPrefix ? ` (filter: ${driver.versionPrefix})` : ''}`);
+    console.log(`🚗 Fetching data for driver: ${driver.name}${driver.versionPrefix ? ` (filter: ${driver.versionPrefix})` : ''}, includePrereleases: ${driver.includePrereleases}`);
 
     try {
         // Add timeout to individual driver fetches
@@ -486,12 +500,16 @@ async function fetchDriverData(driver) {
 
         const fetchPromise = async () => {
             // Fetch Scylla release
-            const scyllaResult = await fetchGitHubReleases(...driver.scyllaRepo.split('/'), driver.versionPrefix);
+            const scyllaResult = await fetchGitHubReleases(
+                ...driver.scyllaRepo.split('/'),
+                driver.versionPrefix,
+                driver.includePrereleases || false
+            );
             console.log(`🗃️ Scylla result for ${driver.name}:`, scyllaResult);
 
             // Fetch Cassandra release (if available)
             let cassandraResult = driver.cassandraRepo ?
-                await fetchGitHubReleases(...driver.cassandraRepo.split('/'), driver.versionPrefix) :
+                await fetchGitHubReleases(...driver.cassandraRepo.split('/'), driver.versionPrefix, driver.includePrereleases || false) :
                 null;
 
             // Special handling for csharp-driver: if API returns no data but we know the correct version
@@ -552,7 +570,7 @@ async function fetchDriverData(driver) {
 
 async function updateTable(forceRefresh = false) {
     console.log('🚀 Starting updateTable, forceRefresh:', forceRefresh);
-    console.log('🔑 GITHUB_TOKEN status:', GITHUB_TOKEN ? 'Loaded (length: ' + GITHUB_TOKEN.length + ')' : 'Not loaded');
+    console.log('🔑 GitHub token status:', githubToken ? 'Loaded (length: ' + githubToken.length + ')' : 'Not loaded');
 
     if (isLoading) {
         console.log('⚠️ Already loading, skipping');
