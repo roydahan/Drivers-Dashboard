@@ -1,14 +1,140 @@
 // ScyllaDB officially supported driver versions (from https://docs.scylladb.com/stable/versioning/driver-support.html)
-const scylladbSupportedVersions = {
-    'python-driver': ['3.29', '3.28'],
-    'java-driver-3x': ['3.11', '3.10'],
-    'java-driver-4x': ['4.19', '4.18'],
-    'gocql': ['1.17', '1.16'],
-    'scylla-rust-driver': ['1.4', '1.3'],
-    'csharp-driver': ['3.22'],
-    'cpp-rs-driver': ['0.6', '0.5'], // Beta
-    'cpp-driver': ['2.16', '2.15']
+// These are fetched dynamically from the docs page, with fallback to cached values
+let scylladbSupportedVersions = {
+    'python-driver': [],
+    'java-driver-3x': [],
+    'java-driver-4x': [],
+    'gocql': [],
+    'scylla-rust-driver': [],
+    'csharp-driver': [],
+    'cpp-rs-driver': [],
+    'cpp-driver': []
 };
+
+// URL for ScyllaDB driver support documentation
+const SCYLLADB_SUPPORT_URL = 'https://docs.scylladb.com/stable/versioning/driver-support.html';
+
+// Mapping from ScyllaDB docs driver names to our internal driver names
+const driverNameMapping = {
+    'python driver': 'python-driver',
+    'go driver': 'gocql',
+    'rust driver': 'scylla-rust-driver',
+    'c# driver': 'csharp-driver',
+    'cpp rs driver': 'cpp-rs-driver',
+    'c++ driver': 'cpp-driver'
+};
+
+// Fetch and parse supported versions from ScyllaDB documentation
+async function fetchSupportedVersions() {
+    console.log('📋 Fetching supported versions from ScyllaDB docs...');
+    
+    try {
+        // Use a CORS proxy for browser compatibility
+        const corsProxies = [
+            'https://api.allorigins.win/raw?url=',
+            'https://corsproxy.io/?'
+        ];
+        
+        let html = null;
+        
+        for (const proxy of corsProxies) {
+            try {
+                const response = await fetch(proxy + encodeURIComponent(SCYLLADB_SUPPORT_URL), {
+                    method: 'GET',
+                    headers: { 'Accept': 'text/html' }
+                });
+                
+                if (response.ok) {
+                    html = await response.text();
+                    console.log('✅ Successfully fetched docs page via proxy');
+                    break;
+                }
+            } catch (e) {
+                console.log(`⚠️ Proxy ${proxy} failed:`, e.message);
+            }
+        }
+        
+        if (!html) {
+            console.log('❌ All CORS proxies failed, using cached versions');
+            return false;
+        }
+        
+        // Parse the HTML to extract supported versions
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Find the supported versions table
+        const table = doc.querySelector('#supported-versions table');
+        if (!table) {
+            console.log('❌ Could not find supported versions table');
+            return false;
+        }
+        
+        const rows = table.querySelectorAll('tbody tr');
+        const newVersions = {};
+        
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 2) {
+                const driverCell = cells[0];
+                const versionsCell = cells[1];
+                
+                // Get driver name from link text or cell text
+                const link = driverCell.querySelector('a');
+                const driverName = (link ? link.textContent : driverCell.textContent).trim().toLowerCase();
+                
+                // Check for Java Driver special case (has both 4.x and 3.x)
+                if (driverName === 'java driver') {
+                    const versionsHtml = versionsCell.innerHTML;
+                    
+                    // Extract 4.x versions
+                    const match4x = versionsHtml.match(/Java Driver 4\.x[\s\S]*?<ul[^>]*>([\s\S]*?)<\/ul>/i);
+                    if (match4x) {
+                        const versions4x = [...match4x[1].matchAll(/<li><p>([^<]+)<\/p><\/li>/g)]
+                            .map(m => m[1].trim().replace(/\s*\(.*\)/, '')); // Remove (Beta) etc.
+                        newVersions['java-driver-4x'] = versions4x;
+                        console.log('  📦 java-driver-4x:', versions4x);
+                    }
+                    
+                    // Extract 3.x versions
+                    const match3x = versionsHtml.match(/Java Driver 3\.x[\s\S]*?<ul[^>]*>([\s\S]*?)<\/ul>/i);
+                    if (match3x) {
+                        const versions3x = [...match3x[1].matchAll(/<li><p>([^<]+)<\/p><\/li>/g)]
+                            .map(m => m[1].trim().replace(/\s*\(.*\)/, ''));
+                        newVersions['java-driver-3x'] = versions3x;
+                        console.log('  📦 java-driver-3x:', versions3x);
+                    }
+                } else {
+                    // Map driver name to our internal name
+                    const internalName = driverNameMapping[driverName];
+                    if (internalName) {
+                        // Extract version numbers from list items
+                        const versionItems = versionsCell.querySelectorAll('li p');
+                        const versions = Array.from(versionItems)
+                            .map(p => p.textContent.trim().replace(/\s*\(.*\)/, '')); // Remove (Beta) etc.
+                        
+                        if (versions.length > 0) {
+                            newVersions[internalName] = versions;
+                            console.log(`  📦 ${internalName}:`, versions);
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Update the supported versions with fetched data
+        if (Object.keys(newVersions).length > 0) {
+            scylladbSupportedVersions = { ...scylladbSupportedVersions, ...newVersions };
+            console.log('✅ Updated supported versions:', scylladbSupportedVersions);
+            return true;
+        }
+        
+        return false;
+    } catch (error) {
+        console.error('❌ Error fetching supported versions:', error);
+        return false;
+    }
+}
 
 // Configuration for database drivers
 const drivers = [
@@ -583,6 +709,11 @@ async function updateTable(forceRefresh = false) {
     cacheStatus.textContent = '⏳ Starting refresh...';
     cacheStatus.style.color = '#ffc107';
 
+    // Refresh supported versions from ScyllaDB docs on force refresh
+    if (forceRefresh) {
+        await fetchSupportedVersions();
+    }
+
     console.log('🧹 Clearing table');
     // Clear existing rows
     tableBody.innerHTML = '';
@@ -895,9 +1026,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('🔄 Refresh button:', refreshBtn ? 'Found' : 'NOT FOUND');
     console.log('💾 Cache status:', cacheStatus ? 'Found' : 'NOT FOUND');
 
-    // Clear cache on startup since we added ScyllaDB support checking
+    // Fetch supported versions from ScyllaDB docs (before loading driver data)
+    await fetchSupportedVersions();
+
+    // Clear cache on startup to get fresh data
     clearCache();
-    console.log('🗑️ Cache cleared on startup (added ScyllaDB support checking)');
+    console.log('🗑️ Cache cleared on startup');
 
     // Test a few key repositories
     console.log('🧪 Testing repository access with authentication...');
