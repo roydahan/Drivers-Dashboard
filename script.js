@@ -6,7 +6,7 @@ const scylladbSupportedVersions = {
     'gocql': ['1.17', '1.16'],
     'scylla-rust-driver': ['1.4', '1.3'],
     'csharp-driver': ['3.22'],
-    'cpp-rs-driver': ['0.5'], // Beta
+    'cpp-rs-driver': ['0.6', '0.5'], // Beta
     'cpp-driver': ['2.16', '2.15']
 };
 
