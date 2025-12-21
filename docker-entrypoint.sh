@@ -13,8 +13,8 @@ if [ -n "$GITHUB_TOKEN" ]; then
     cat > /usr/share/nginx/html/config.js << EOF
 // Auto-generated config with GitHub token
 // Generated at container startup from GITHUB_TOKEN environment variable
-const githubToken = '$GITHUB_TOKEN';
-window.GITHUB_CONFIG = { GITHUB_TOKEN: githubToken };
+const GITHUB_TOKEN = '$GITHUB_TOKEN';
+window.GITHUB_CONFIG = { GITHUB_TOKEN: GITHUB_TOKEN };
 EOF
     echo "✅ Config generated with authentication (5,000 requests/hour)"
 else
@@ -30,5 +30,6 @@ fi
 echo "🌐 Starting nginx..."
 # Execute the original nginx command
 exec nginx -g 'daemon off;'
+
 
 
