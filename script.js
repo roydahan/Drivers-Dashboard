@@ -25,69 +25,61 @@ const driverNameMapping = {
     'node.js rs driver': 'nodejs-rs-driver'
 };
 
-// Fetch and parse supported versions from ScyllaDB documentation
+// Fetch and parse supported versions from ScyllaDB documentation (HTML)
 async function fetchSupportedVersions() {
-    console.log('📋 Fetching supported versions from ScyllaDB docs...');
-    
+    console.log('📋 Fetching supported versions from ScyllaDB docs (HTML)...');
+
     try {
-        // Use a CORS proxy for browser compatibility
-        const corsProxies = [
-            'https://api.allorigins.win/raw?url=',
-            'https://corsproxy.io/?'
-        ];
-        
+        // Fetch HTML page directly (avoid broken CORS proxies)
         let html = null;
-        
-        for (const proxy of corsProxies) {
-            try {
-                const response = await fetch(proxy + encodeURIComponent(SCYLLADB_SUPPORT_URL), {
-                    method: 'GET',
-                    headers: { 'Accept': 'text/html' }
-                });
-                
-                if (response.ok) {
-                    html = await response.text();
-                    console.log('✅ Successfully fetched docs page via proxy');
-                    break;
-                }
-            } catch (e) {
-                console.log(`⚠️ Proxy ${proxy} failed:`, e.message);
+
+        try {
+            const response = await fetch(SCYLLADB_SUPPORT_URL, {
+                method: 'GET',
+                headers: { 'Accept': 'text/html' }
+            });
+
+            if (response.ok) {
+                html = await response.text();
+                console.log('✅ Successfully fetched docs page directly');
+            } else {
+                console.log(`❌ Failed to fetch docs page: ${response.status} ${response.statusText}`);
+                return false;
             }
-        }
-        
-        if (!html) {
-            console.log('❌ All CORS proxies failed, using cached versions');
+        } catch (e) {
+            console.log('❌ Network error fetching docs page:', e.message);
             return false;
         }
-        
+
+        const newVersions = {};
+
         // Parse the HTML to extract supported versions
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        
+
         // Find the supported versions table
         const table = doc.querySelector('#supported-versions table');
         if (!table) {
             console.log('❌ Could not find supported versions table');
             return false;
         }
-        
+
         const rows = table.querySelectorAll('tbody tr');
-        const newVersions = {};
-        
+
         rows.forEach(row => {
             const cells = row.querySelectorAll('td');
             if (cells.length >= 2) {
                 const driverCell = cells[0];
                 const versionsCell = cells[1];
-                
+
                 // Get driver name from link text or cell text
                 const link = driverCell.querySelector('a');
                 const driverName = (link ? link.textContent : driverCell.textContent).trim().toLowerCase();
-                
+
                 // Check for Java Driver special case (has both 4.x and 3.x)
                 if (driverName === 'java driver') {
                     const versionsHtml = versionsCell.innerHTML;
-                    
+
                     // Extract 4.x versions
                     const match4x = versionsHtml.match(/Java Driver 4\.x[\s\S]*?<ul[^>]*>([\s\S]*?)<\/ul>/i);
                     if (match4x) {
@@ -96,7 +88,7 @@ async function fetchSupportedVersions() {
                         newVersions['java-driver-4x'] = versions4x;
                         console.log('  📦 java-driver-4x:', versions4x);
                     }
-                    
+
                     // Extract 3.x versions
                     const match3x = versionsHtml.match(/Java Driver 3\.x[\s\S]*?<ul[^>]*>([\s\S]*?)<\/ul>/i);
                     if (match3x) {
@@ -113,7 +105,7 @@ async function fetchSupportedVersions() {
                         const versionItems = versionsCell.querySelectorAll('li p');
                         const versions = Array.from(versionItems)
                             .map(p => p.textContent.trim().replace(/\s*\(.*\)/, '')); // Remove (Beta) etc.
-                        
+
                         if (versions.length > 0) {
                             newVersions[internalName] = versions;
                             console.log(`  📦 ${internalName}:`, versions);
@@ -122,14 +114,14 @@ async function fetchSupportedVersions() {
                 }
             }
         });
-        
+
         // Update the supported versions with fetched data
         if (Object.keys(newVersions).length > 0) {
             scylladbSupportedVersions = { ...scylladbSupportedVersions, ...newVersions };
             console.log('✅ Updated supported versions:', scylladbSupportedVersions);
             return true;
         }
-        
+
         return false;
     } catch (error) {
         console.error('❌ Error fetching supported versions:', error);
