@@ -54,7 +54,7 @@ build_image() {
     echo -e "${BLUE}🏗️  Building Docker image: ${FULL_IMAGE_NAME}${NC}"
 
     # Build without token injection (token handled at runtime)
-    docker build -t "${FULL_IMAGE_NAME}" .
+    podman build -t "${FULL_IMAGE_NAME}" .
 
     echo -e "${GREEN}✅ Build completed!${NC}"
     echo -e "${BLUE}ℹ️  Token will be injected at runtime via volume mount${NC}"
@@ -65,16 +65,16 @@ deploy_container() {
     echo -e "${BLUE}🚀 Deploying container...${NC}"
 
     # Stop existing container if running
-    if docker ps -q -f name=drivers-dashboard | grep -q .; then
+    if podman ps -q -f name=drivers-dashboard | grep -q .; then
         echo "🛑 Stopping existing container..."
-        docker stop drivers-dashboard >/dev/null 2>&1 || true
-        docker rm drivers-dashboard >/dev/null 2>&1 || true
+        podman stop drivers-dashboard >/dev/null 2>&1 || true
+        podman rm drivers-dashboard >/dev/null 2>&1 || true
     fi
 
     # Run the container with GITHUB_TOKEN as environment variable
     if [ -n "$GITHUB_TOKEN" ]; then
         echo -e "${GREEN}🔑 Deploying with GitHub token authentication${NC}"
-        docker run -d \
+        podman run -d \
             --name drivers-dashboard \
             --restart unless-stopped \
             -p 8080:80 \
@@ -82,7 +82,7 @@ deploy_container() {
             "${FULL_IMAGE_NAME}"
     else
         echo -e "${YELLOW}⚠️  Deploying without GitHub token${NC}"
-        docker run -d \
+        podman run -d \
             --name drivers-dashboard \
             --restart unless-stopped \
             -p 8080:80 \
@@ -94,7 +94,7 @@ deploy_container() {
     echo -e "${GREEN}🌐 Access your dashboard at: http://localhost:8080${NC}"
     echo ""
     echo -e "${BLUE}📊 Container Status:${NC}"
-    docker ps -f name=drivers-dashboard --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    podman ps -f name=drivers-dashboard --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 }
 
 # Show usage information
@@ -147,9 +147,9 @@ main() {
     fi
 
     echo ""
-    echo -e "${BLUE}🛑 To stop: docker stop drivers-dashboard${NC}"
-    echo -e "${BLUE}🗑️  To remove: docker rm drivers-dashboard${NC}"
-    echo -e "${BLUE}📊 View logs: docker logs -f drivers-dashboard${NC}"
+    echo -e "${BLUE}🛑 To stop: podman stop drivers-dashboard${NC}"
+    echo -e "${BLUE}🗑️  To remove: podman rm drivers-dashboard${NC}"
+    echo -e "${BLUE}📊 View logs: podman logs -f drivers-dashboard${NC}"
 }
 
 # Run main function

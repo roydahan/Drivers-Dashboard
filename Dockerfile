@@ -2,7 +2,7 @@
 # Build a lightweight container for the static web application
 
 # Use the official nginx alpine image for a small footprint
-FROM nginx:alpine
+FROM docker.io/library/nginx:alpine
 
 # Set maintainer label
 LABEL maintainer="Drivers Dashboard <dashboard@example.com>"
