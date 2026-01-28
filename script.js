@@ -21,7 +21,8 @@ const driverNameMapping = {
     'rust driver': 'scylla-rust-driver',
     'c# driver': 'csharp-driver',
     'cpp rs driver': 'cpp-rs-driver',
-    'c++ driver': 'cpp-driver'
+    'c++ driver': 'cpp-driver',
+    'node.js rs driver': 'nodejs-rs-driver'
 };
 
 // Fetch and parse supported versions from ScyllaDB documentation
